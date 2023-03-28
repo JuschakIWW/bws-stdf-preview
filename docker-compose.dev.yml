@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+
+  core-tool:
+    volumes:
+      - ./flask-backend/app:/core-tool/app
+      #- ./flask-backend/openapi_client:/core-tool/openapi_client # Currently problematic / buggy
+    command: ["python", "/core-tool/run.py"]
+    #command: ["python", "-m", "flask", "run", "--host=0.0.0.0"]
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=development

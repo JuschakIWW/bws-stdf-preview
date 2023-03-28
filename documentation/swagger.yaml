@@ -1,0 +1,749 @@
+openapi: 3.0.3
+info:
+  title: stdf-tool api
+  description: Api for the core / forecasting component of the short-term demand forecasting tool developed in the B-WaterSmart project.
+  version: "0.1.1"
+  contact:
+    email: ma.juschak@iww-online.de
+    name: Marcel Juschak
+
+# Endpoints
+paths:
+  /physical-meters:
+    get:
+      description: Fetches the meta data of all existing physical meters.
+      tags:
+        - Physical Meters
+      parameters:
+        - name: includeMeasurements
+          in: query
+          description: Boolean indicating whether to include the meter's measurements.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Physical meters successfully fetched.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  meters:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Device"
+                  measurements:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        refDevice:
+                          type: string
+                          description: Id of the corresponding phyiscal meter.
+                        unit:
+                          type: string
+                          description: Unit of the measurements. In case of an acronym, specified as a unit code accepted in [CEFACT](https://www.unece.org/cefact.html).
+                          example: MQH
+                        measurements:
+                          type: array
+                          items:
+                            $ref: "#/components/schemas/DeviceMeasurement"
+
+  /physical-meters/{pmid}:
+    get:
+      description: Fetches the meta data and measurements of the specified physical meter.
+      tags:
+        - Physical Meters
+      parameters:
+        - name: pmid
+          in: path
+          description: ID of the physical meter to fetch.
+          required: true
+          schema:
+            type: string
+        - name: includeMeasurements
+          in: query
+          description: Boolean indicating whether to include the meter's measurements.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Physcial meter successfully fetched.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  meta:
+                    $ref: "#/components/schemas/Device"
+                  measurements:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DeviceMeasurement"
+        "404":
+          description: Virtual meter not found
+
+  /virtual-meters:
+    get:
+      description: Fetches the meta data of all existing virtual meters.
+      tags:
+        - Virtual Meters
+      responses:
+        "200":
+          description: Virtual meters successfully fetched.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  virtualMeters:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/virtualMeter"
+
+    post:
+      description: Creates a new virtual meter by aggregating existing virtual and physical meters as submeters.
+      tags:
+        - Virtual Meters
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                submeterIds:
+                  description: IDs of the virtual or physical meters to be represented by this virtual meter.
+                  type: array
+                  items:
+                    type: string
+                description:
+                  type: string
+                areaServed:
+                  type: string
+                  description: Optional code that indicates which area this virtual meter describes.
+                address:
+                  $ref: "#/components/schemas/address"
+
+      responses:
+        "200":
+          description: Virtual Meter successfully created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  virtualMeterId:
+                    type: string
+        "400":
+          description: Invalid input, for example because a required field is missing or some of the specified submeterIds do not refer to any known meter. It could also be the case that the provided submeters do not define a disjoint set of meters. In order to avoid multiple physical meters being counted twice, every meter can only appear once in the hierarchy of meters.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      errorMsg:
+                        type: string
+
+  /virtual-meters/{vmid}:
+    get:
+      description: Fetches the meta data of the specified virtual meter.
+      tags:
+        - Virtual Meters
+      parameters:
+        - name: vmid
+          in: path
+          description: ID of the virtual meter to fetch.
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Virtual meter successfully fetched.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/virtualMeter"
+        "404":
+          description: Virtual meter not found
+
+    delete:
+      description: Deletes a virtual meter.
+      tags:
+        - Virtual Meters
+      parameters:
+        - name: vmid
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: removeFromSuperMeters
+          description: If set to true, the virtual meter will also be removed from all its supermeters, i.e. those where the vm serves as a submeter. If this virtual meter is used as a submeter to define a supermeter, but removeFromSuperMeters is not set to true, this will lead to a 405 response. Setting this parameter to true is discouraged, as it is possible that supermeters do not refer to any submeters anymore and thus become empty / orphans.
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Virtual meter successfully deleted.
+        "404":
+          description: Virtual meter not found
+        "405":
+          description: Virtual meter could not be deleted, because it is used to define a supermeter and \"removeFromSuperMeters\" is not set to true.
+
+  #  /virtual-meters/models:
+  #    post:
+  #      description: Trains a model for every specified meter.
+  #      tags:
+  #        - Virtual Meters
+  #      parameters:
+  #        - name: vmids
+  #          in: query
+  #          description: IDs of the virtual meters to train models for.
+  #          required: true
+  #          schema:
+  #            type: array
+  #            items:
+  #              type: string
+  #        - name: algorithm
+  #          in: query
+  #          description: The algorithm to use for training.
+  #          required: true
+  #          schema:
+  #            type: string
+  #      responses:
+  #        "200":
+  #          description: Models successfully trained.
+  #          #content:
+  #          #  application/json:
+  #          #    schema:
+  #          #      type: object
+  #          #      properties:
+  #          #        modelIds:
+  #          #          type: array
+  #          #          items:
+  #          #            type: string
+  #        "405":
+  #          description: Invalid input.
+
+  #    put:
+  #      description: Updates the models for every specified meter. Models that were trained on (exactly) one of the given virtual meters with the specified algorithm are tested if they are outdated. If a model does not exist or it is outdated, it is replaced with a newly trained model.
+  #      tags:
+  #        - Virtual Meters
+  #      parameters:
+  #        - name: vmids
+  #          in: query
+  #          description: IDs of the virtual meters to update models for. Every virtual meter is checked individually if it is associated with outdated models.
+  #          required: true
+  #          schema:
+  #            type: array
+  #            items:
+  #              type: string
+  #        - name: algorithm
+  #          in: query
+  #          description: The algorithm used for training.
+  #          required: true
+  #          schema:
+  #            type: string
+  #      responses:
+  #        "200":
+  #          description: Models successfully updated.
+  #        "405":
+  #          description: Invalid input.
+
+  # TODO: Fix endpoints above to train lists of meters instead of only a specific virtual meter?
+
+  /algorithms:
+    get:
+      description: Returns a list of available algorithms.
+      tags:
+        - Algorithms
+      parameters:
+        - name: includeParameters
+          in: query
+          description: Boolean indicating whether to include the parameters and their specifications for each algorithm.
+          schema:
+            type: boolean
+            default: false
+        - name: meterID
+          in: query
+          description: Optional string ID of a physical or virtual meter. If given, only the algorithms for which the meter already has a trained model will be returned.
+          schema:
+            type: string
+          required: false
+      responses:
+        "200":
+          description: List of algorithm specifications successfully returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  algorithms:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/algorithmSpec"
+        "404":
+          description: No associated meter or model could be found.
+
+  /meters/{id}/models:
+    get:
+      description: Fetches a list of all models associated with the meter.
+      tags:
+        - Models
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: "string"
+      responses:
+        "200":
+          description: 200 response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MLModel"
+        "404":
+          description: No virtual or physical meter found that matches the given id.
+
+  #    put:
+  #      description: Updates the models of the specified virtual or physical meter. Models are only (re-)trained if either none exists yet or if it is outdated.
+  #      tags:
+  #        - Models
+  #      parameters:
+  #        - name: id
+  #          in: path
+  #          description: ID of the virtual or phyiscal meters to update models for.
+  #          required: true
+  #          schema:
+  #            type: string
+  #        - name: algorithm
+  #          in: query
+  #          description: The algorithm used for training.
+  #          required: true
+  #          schema:
+  #            type: string
+  #      responses:
+  #        "200":
+  #          description: Models successfully updated.
+  #        "405":
+  #          description: Invalid input.
+
+  /meters/{id}/models/{algorithm}:
+    delete:
+      description: Deletes the model(s) of a virtual or physical meter that correspond to the specified algorithm.
+      tags:
+        - Models
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: "string"
+        - name: algorithm
+          in: path
+          required: true
+          schema:
+            type: "string"
+      responses:
+        "200":
+          description: Model(s) successfully deleted.
+
+    put:
+      description: Trains a model for the specified virtual or physical meter.
+      tags:
+        - Models
+      parameters:
+        - name: id
+          in: path
+          description: ID of the virtual or physical meter to train models for.
+          required: true
+          schema:
+            type: string
+        - name: algorithm
+          in: path
+          description: The algorithm to use for training.
+          required: true
+          schema:
+            $ref: "#/components/schemas/algorithm"
+        - name: setDefault
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Whether to set this model as the default for the specified meter to generate predictions with.
+        - name: hyperParamSearch
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Whether to perform hyperparameter optimization to automatically find the best hyperparameters for the training algorithm.
+
+      responses:
+        "200":
+          description: Id of the trained model and associated meter. In case of evaluation=true, the response includes evaluation metrics.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/evaluation"
+        "405":
+          description: Invalid input or the referenced virtual meter or one of the submeters is an orphan, meaning that it does not refer to any submeter. This can happen if all submeters were deleted. As a consequence, there is no data to train this meter.
+
+  /models:
+    get:
+      description: Returns all existing models.
+      tags:
+        - Models
+      responses:
+        "200":
+          description: 200 response.
+
+  /models/{id}:
+    delete:
+      description: Deletes the model with the specified id.
+      tags:
+        - Models
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: "string"
+      responses:
+        "200":
+          description: Model successfully deleted.
+        "404":
+          description: Model not found.
+
+  /meters/{id}/forecast:
+    get:
+      description: Generates a 24-hour forecast for the specified virtual or physical meter.
+      tags:
+        - Forecasts
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: "string"
+          description: The id of the meter for which to create a forecast.
+        - name: algorithm
+          in: query
+          required: false
+          schema:
+            type: "string"
+          description: The algorithm to use for the forecast. If unspecified, uses the algorithm set as default for the meter.
+        - name: date
+          in: query
+          schema:
+            type: string
+          description: The day for which to create the forecast in ISO8601 UTC format. If not specified, the following day w.r.t. day of the request will be chosen.
+      responses:
+        "200":
+          description: Forecast successfully generated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/waterFlowForecastTimeSeries"
+        "400":
+          description: Invalid parameters, for example the specified algorithm could be unknown.
+        "404":
+          description: No associated meter or model could be found.
+        "405":
+          description: The model may be invalid because e.g. a submeter was deleted, requiring the model to be re-trained.
+
+components:
+  schemas:
+    MLModel:
+      $ref: "https://smart-data-models.github.io/dataModel.MachineLearning/MLModel/model.yaml#/MLModel"
+
+    Device:
+      $ref: "https://smart-data-models.github.io/dataModel.Device/Device/model.yaml#/Device"
+
+    DeviceMeasurement:
+      $ref: "https://smart-data-models.github.io/dataModel.Device/DeviceMeasurement/model.yaml#/DeviceMeasurement"
+
+    virtualMeter:
+      title: VirtualMeter
+      type: object
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        address:
+          $ref: "#/components/schemas/address"
+        areaServed:
+          description: "The geographic area where a service or offered item is provided"
+          type: string
+          x-ngsi:
+            model: https://schema.org/Text
+            type: Property
+        #models:
+        #  type: array
+        #  items:
+        #    $ref: "#/components/schemas/MLModel"
+        submeterIds:
+          type: array
+          items:
+            type: string
+          description: List of IDs of physical or virtual meters that this vm represents.
+        supermeterIds:
+          type: array
+          items:
+            type: string
+          description: List of IDs super meters that this virtual meter is part of.
+      required:
+        - id
+        - submeterIds
+
+    waterFlowForecast:
+      title: WaterFlowForecast
+      type: array
+      items:
+        type: object
+        properties:
+          id:
+            type: string
+          datePredicted:
+            type: string
+            format: date-time
+            description: The date when the data point is predicted to be observed.
+          numValue:
+            type: number
+          unit:
+            type: string
+            description: Units of the measurement. In case of use of an acronym use units accepted in [CEFACT](https://www.unece.org/cefact.html) code.
+            example: MQH
+          refDevice:
+            type: string
+            description: The physical meter (device) or virtual meter that this forecast corresponds to.
+          type:
+            type: string
+            description: (NGSI Entity type. It has to be WaterFlowForecast. Note that this is only preliminary, as the type WaterFlowForecast does not exist yet.)
+        required:
+          - id
+          - datePredicted
+          - numValue
+          - refDevice
+
+    waterFlowForecastTimeSeries:
+      title: ForecastTimeseries
+      type: object
+      properties:
+        forecast:
+          $ref: "#/components/schemas/waterFlowForecast"
+        forecastAnalysis:
+          $ref: "#/components/schemas/forecastAnalysis"
+      required:
+        - forecast
+
+    forecastAnalysis:
+      title: ForecastAnalysis
+      description: TODO. Contains components like daily or weekly seasonalities that sum up to the original forecast and can be used for analysis purposes.
+      type: array
+      items:
+        type: object
+        properties:
+          name:
+            type: string
+          forecast:
+            $ref: "#/components/schemas/waterFlowForecast"
+
+    # TODO: Possibly remove due to redundancy with trainOptions?
+    forecastingConfiguration:
+      title: ForecastingConfiguration
+      description: Contains information on default algorithms, model re-training frequency, etc... for a specific meter.
+      type: object
+      properties:
+        refMeter:
+          type: "string"
+          description: The id of the associated virtual or phyiscal meter.
+        defaultAlgorithm:
+          type: "string"
+          description: The algorithm set as default for forecasting.
+
+    algorithm:
+      title: Algorithm
+      description: Algorithm to use for training a forecasting model.
+      type: string
+      enum: [prophet]
+
+    algorithmSpec:
+      title: Algorithm Specification
+      description: Specification of an algorithm that can be used for training a forecasting model.
+      properties:
+        name:
+          type: string
+          description: Name of the algorithm.
+        description:
+          type: string
+          description: Description of the algorithm.
+        parameters:
+          type: array
+          items:
+            $ref: "#/components/schemas/parameterSpec"
+          description: The parameters that have to be specified for this algorithm.
+    #        hyperParameterSearch:
+    #          type: boolean
+    #          description: Whether hyperparameter optimization is supported for this algorithm.
+
+    parameterSpec:
+      title: Parameter
+      description: Specification of a parameter for training with a forecasting algorithm.
+      properties:
+        name:
+          type: string
+          description: Name of the parameter.
+        description:
+          type: string
+          description: Description of the parameter.
+        type:
+          type: string
+          description: Type of the parameter.
+          enum: [string, integer, float, boolean]
+        default:
+          type: string
+          description: Default value of the parameter.
+        options:
+          oneOf:
+            - $ref: "#/components/schemas/parameterValueRange"
+            - $ref: "#/components/schemas/parameterValueList"
+          description: The options for the parameter. Either a range of values or a list of values.
+      example:
+        name: "maxDepth"
+        description: "The maximum depth of the tree. Increasing this value will make the model more complex and more likely to overfit."
+        type: "integer"
+        default: 3
+        options:
+          minValue: 3
+          maxValue: 5
+    #        - name: "seasonalityMode"
+    #          description: "How to model the seasonality of the data. 'additive' is the default. 'multiplicative' is an alternative that can be used when the seasonal component is multiplicative."
+    #          type: "string"
+    #          default: "additive"
+    #          options:
+    #              - "additive"
+    #              - "multiplicative"
+
+    parameterValueRange:
+      description: Range of possible values for a numeric parameter.
+      type: object
+      properties:
+        min:
+          type: number
+        max:
+          type: number
+      example:
+        minValue: 0
+        maxValue: 10
+
+    parameterValueList:
+      description: List of possible values for a categorical parameter.
+      type: object
+      properties:
+        categories:
+          type: array
+          items:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+            example: ["auto", "exact", "approx"]
+
+    trainOptions:
+      title: TrainOptions
+      description: The information needed to train a model
+      properties:
+        algorithm:
+          $ref: "#/components/schemas/algorithm"
+        setDefault:
+          type: boolean
+          default: false
+          description: Whether to set the newly trained model as default for the associated meter when creating forecasts.
+        hyperParamSearch:
+          type: boolean
+          default: false
+          description: Whether to perform hyperparameter optimization to automatically find the best hyperparameters for the training algorithm. Takes significantly more time, as many different combinations of parameters are evaluated.
+
+    evaluation:
+      title: Evaluation
+      description: Evaluation after model training.
+      properties:
+        modelId:
+          type: string
+          description: Id of the associated model.
+        refMeter:
+          type: string
+          description: Id of the associated meter.
+        mae:
+          type: number
+          description: Mean absolute error obtained on the test data.
+          example: 3.385
+        mse:
+          type: number
+          description: mean squared error obtained on the test data.
+          example: 22.23
+        mape:
+          type: number
+          description: mean absolute percentage error obtained on the test data.
+          example: 2.78
+        r2:
+          type: number
+          description: coefficient of determination (R squared) obtained on the test data.
+          example: 0.455
+        trainTestSplit:
+          type: number
+          description: Portion of full dataset used for training (and thus implicitly portion of dataset used for evaluation).
+          example: 0.8
+        datesTestSet:
+          type: array
+          description: Array of dates used in the test set.
+          items:
+            type: string
+            description: Date in ISO8601 UTC format.
+        yPredTestSet:
+          type: array
+          description: Array of predicted values in the test set.
+          items:
+            type: number
+        yTrueTestSet:
+          type: array
+          description: Array of true / actual values in the test set.
+          items:
+            type: number
+
+    address:
+      title: Address
+      description: "The mailing address"
+      properties:
+        addressCountry:
+          description: "Property. The country. For example, Spain. Model:'https://schema.org/addressCountry'"
+          type: string
+        addressLocality:
+          description: "Property. The locality in which the street address is, and which is in the region. Model:'https://schema.org/addressLocality'"
+          type: string
+        addressRegion:
+          description: "Property. The region in which the locality is, and which is in the country. Model:'https://schema.org/addressRegion'"
+          type: string
+        postOfficeBoxNumber:
+          description: "Property. The post office box number for PO box addresses. For example, 03578. Model:'https://schema.org/postOfficeBoxNumber'"
+          type: string
+        postalCode:
+          description: "Property. The postal code. For example, 24004. Model:'https://schema.org/https://schema.org/postalCode'"
+          type: string
+        streetAddress:
+          description: "Property. The street address. Model:'https://schema.org/streetAddress'"
+          type: string
+      type: object
+      x-ngsi:
+        model: https://schema.org/address
+        type: Property
